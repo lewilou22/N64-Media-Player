@@ -1,6 +1,6 @@
 # Media Player 64 — N64 ROM
 
-A **libdragon** homebrew ROM for real Nintendo 64 hardware with an **SD-capable flash cart** (EverDrive 64 / X7, 64drive, SummerCart64, etc.). It browses your SD card and plays **video**, **music**, and **images** from one menu — no PC required at playback time.
+A **libdragon** homebrew ROM for real Nintendo 64 hardware with an **SD-capable flash cart** (EverDrive 64 / X7, 64drive, SummerCart64, etc.). It browses your SD card and plays **video**, **music**, and **images** from one menu 
 
 The main unified build is **`ed64media.z64`** (`make -f Makefile.ed64combo`).
 
