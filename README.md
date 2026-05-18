@@ -1,323 +1,281 @@
-# Media Player 64 — N64 ROM
+# N64 Media Player
 
-A **libdragon** homebrew ROM for real Nintendo 64 hardware with an **SD-capable flash cart** (EverDrive 64 / X7, 64drive, SummerCart64, etc.). It browses your SD card and plays **video**, **music**, and **images** from one menu 
+Play **videos**, **music**, and **pictures** from your flash cart’s **SD card** on a real Nintendo 64 (EverDrive 64, EverDrive X7, 64drive, SummerCart64, etc.).
 
-The main unified build is **`ed64media.z64`** (`make -f Makefile.ed64combo`).
-
----
-
-## What runs on the console
-
-| Layer | Role |
-|--------|------|
-| **Flash cart + FAT32 SD** | Stores the `.z64` ROM and your media files under `sd:/` |
-| **libdragon** | SD filesystem, display (320×240), audio mixer, joypad, DFS (`rom:/`) assets |
-| **MPEG-1 / H.264** | libdragon FMV (`fmv_play`) decodes elementary streams on the RSP/RDP |
-| **minimp3** | Decodes `.mp3` / `.mp2` in software on the CPU |
-| **stb_image + gifdec** | Still images and small animated GIFs |
-| **This ROM** | File browser, playback UIs, handoff between video / audio / image modes |
-
-**Important:** Most emulators (including Ares) **do not** expose EverDrive-style SD storage to homebrew. Treat this as **hardware-first** software; use a real cart or a setup that emulates SD the way your cart firmware does.
-
-**Toolchain:** Requires **libdragon preview** (FMV APIs are not on stable `trunk`). See [Installing libdragon](https://github.com/DragonMinded/libdragon/wiki/Installing-libdragon) and `. ./env.sh` in this repo.
+**No libdragon install needed** if you only want to convert files on your PC and copy them to the card.
 
 ---
 
-## How it works (high level)
+## Quick start (beginners)
 
-```mermaid
-flowchart TD
-    Boot[Power on N64] --> ROM[ed64media.z64 loads]
-    ROM --> SD[Mount sd:/ via cart]
-    SD --> CFG{VIDEO.CFG present?}
-    CFG -->|yes, one-shot| FMV[Play video sequence]
-    CFG -->|no| Menu[ED64 MEDIA browser]
-    Menu -->|pick file| Type{File type}
-    Type -->|.m1v .h264 .mp4| FMV
-    Type -->|.mp3 .mp2 .wav| Music[MP3 player UI]
-    Type -->|image| Img[Image viewer]
-    FMV --> Menu
-    Music --> Menu
-    Img --> Menu
+### What you need
+
+| On the N64 | On your PC |
+|------------|--------------|
+| Flash cart with **FAT32** SD card | **Python 3** + **ffmpeg** (for converting video) |
+| The player ROM (see below) | Your video / MP3 / image files |
+
+> **Emulators:** Most emulators do **not** show the cart’s SD card to homebrew. Use **real hardware** (or a cart-specific setup).
+
+### 5 steps
+
+1. **Download the ROM** from the latest release:  
+   **[N64 Media Player V2](https://github.com/lewilou22/N64-Media-Player/releases/tag/V2)**  
+   Get **`MediaPlayer_64.z64`** (512 KB player ROM).
+
+2. **Put the ROM on your SD card**  
+   Copy `MediaPlayer_64.z64` where your cart expects homebrew (often `ED64/` or `ED64P/` — check your EverDrive manual).
+
+3. **Convert a video on your PC** (see [Convert video (V2)](#convert-video-v2--recommended) below)  
+   You get two files with the **same name**, for example:
+   - `myclip.h264` — video  
+   - `myclip.wav` — audio  
+
+4. **Copy those files** (and any MP3s / images) onto the SD card — any folder is fine, e.g. `videos/`, `music/`.
+
+5. **On the N64:** boot the ROM → browse with the D-pad → **A** to play.  
+   Press **C-Up** in the menu for the full control guide.
+
+---
+
+## Convert video (V2) — recommended
+
+**[Release V2](https://github.com/lewilou22/N64-Media-Player/releases/tag/V2)** adds an updated **video + audio conversion** tool. It turns a normal file (MP4, MKV, AVI, …) into N64-ready **`.h264` + `.wav`** sidecars. You do **not** need libdragon on your PC for this step.
+
+### What it produces
+
+| File | Purpose |
+|------|---------|
+| **`name.h264`** | H.264 video (320px wide, N64-friendly settings) |
+| **`name.wav`** | PCM audio (mono, 32 kHz) — paired with the video |
+
+Put **both** files in the **same folder** on the SD card. The player hides the `.wav` in the list and uses it automatically during playback.
+
+### Option A — download the release zip
+
+From **[V2 assets](https://github.com/lewilou22/N64-Media-Player/releases/tag/V2)** download:
+
+- `MediaPlayer_64.z64` — ROM  
+- `split_media_gui.py`, `split_media_lib.py`, `Run_N64_Media_Split.bat` — converter  
+- `MediaPlayer64.md` — extra notes  
+
+**Windows:** install [Python 3](https://www.python.org/downloads/) (check “Add to PATH”) and [ffmpeg](https://www.gyan.dev/ffmpeg/builds/), then double-click **`Run_N64_Media_Split.bat`**.
+
+### Option B — use the copy in this repo
+
+Same tools live here:
+
+```text
+scripts/n64-media-split/
 ```
 
-1. **Boot** — Initializes joypad, SD, audio, and video codecs (MPEG-1 + H.264).
-2. **Optional autoplay** — If `sd:/ED64P/VIDEO.CFG` or `sd:/ED64/VIDEO.CFG` exists, the ROM plays that path once, then **deletes** the config so the next boot returns to the menu.
-3. **Browser** — Lists folders and supported files on `sd:/` (and subfolders). Sidecar `.wav` / `.wav64` files paired with video are **hidden** from the list but used during FMV playback.
-4. **Playback** — Selecting a file tears down the menu display, runs the correct player (`sd_player.c` or `sd_mp3_player.c`), then reloads the menu at the same folder.
+**GUI (Windows):**
 
-Media stays on the SD card; the ROM is only the player engine plus small `rom:/` UI sprites and help text.
+```bat
+cd scripts\n64-media-split
+Run_N64_Media_Split.bat
+```
+
+**GUI (Mac / Linux):**
+
+```bash
+cd scripts/n64-media-split
+python3 split_media_gui.py
+```
+
+**Command line:**
+
+```bash
+cd scripts/n64-media-split
+python3 split_media_cli.py -o ~/Videos/n64-out /path/to/episode.mp4
+```
+
+Default encode: **320px** wide, **H.264 baseline**, **800k** video, **mono 32 kHz** WAV. Adjust in the GUI if needed.
+
+More detail: [`scripts/n64-media-split/README.md`](scripts/n64-media-split/README.md).
+
+### Optional: `.wav64` instead of `.wav`
+
+The ROM also accepts **`.wav64`** (libdragon VADPCM, smaller / often smoother on 4 MB consoles). After V2 gives you a `.wav`, convert it with **`audioconv64`** from the [libdragon toolchain](https://github.com/DragonMinded/libdragon/wiki/Installing-libdragon), or the standalone **`audioconv64`** bundle from the [V1.02 release](https://github.com/lewilou22/N64-Video-Player/releases/tag/V1.02). Keep the **same base name** as the `.h264` file.
+
+### Music and images (no converter needed)
+
+Copy these straight to the SD card:
+
+- **Music:** `.mp3`, `.mp2`, `.wav` (not `.m4a` / `.aac` — convert to MP3 on PC first)  
+- **Images:** `.jpg`, `.png`, `.gif`, `.bmp`, and other common types (see [Supported files](#supported-files))
 
 ---
 
-## SD card setup
+## Controls (summary)
 
-1. Format the SD card as **FAT32**.
-2. Copy **`MediaPlayer64.z64`** to your cart’s homebrew path (firmware-dependent), for example:
-   - EverDrive 64 (classic): `ED64/`
-   - EverDrive 64 / X7 (Plus): `ED64P/` or the path your firmware documents for “load ROM from SD”
-3. Put media anywhere on the card, e.g. `sd:/videos/`, `sd:/music/`, `sd:/pics/`.
-4. (Optional) For **autoplay on boot**, create a one-line config (deleted after use):
+| Where | Buttons |
+|-------|---------|
+| **File menu** | D-pad move · **A** open/play · **B** up folder · **L/R/Z** page · **C-Up** help |
+| **Video** | **A** pause · **B** stop · **D-L/R** seek ±10 s · **Z** mute |
+| **Music** | **B** stop · **A** pause · **L/R** seek · **C-Up/Down** visualizer |
+| **Pictures** | **B/Start** back · **L/R** prev/next |
 
-   ```text
-   video=sd:/path/to/clip.m1v
-   ```
-
-   Paths: `sd:/ED64P/VIDEO.CFG` or `sd:/ED64/VIDEO.CFG`. You can also use a `.mp4` **catalog name** if `clip.h264` or `clip.m1v` exists beside it.
-
-### Preparing files on a PC
-
-The N64 does **not** demux MP4 or decode AAC. Use the scripts in this repo on a computer:
-
-| Goal | Tool |
-|------|------|
-| Video for SD / ROM | `./scripts/video2n64.py`, `./scripts/encode_video.sh`, or `scripts/mp4_demux_for_n64.sh` |
-| AAC / M4A → MP3 | `scripts/sd_music_from_aac_m4a.sh` |
-| Long episodes in parts | `video2n64.py --chunk-auto` → `name_part001.m1v`, … |
-
-Details: root **`README.md`** (converter section) and **`PACKAGING.md`**.
+Full 4-page guide is **in the ROM** (**C-Up** on the file menu).
 
 ---
 
-## Supported file types
+## Supported files
 
-### Video (FMV)
-
-| Extension | On-card role |
-|-----------|----------------|
-| **`.m1v`** | MPEG-1 elementary stream (primary format) |
-| **`.h264`** | Raw Annex-B H.264 elementary stream |
-| **`.mp4`** | **Catalog label only** — listed if the same stem has `.m1v` or `.h264`; playback uses the elementary file |
-| **`.wav64`** | Optional VADPCM audio sidecar (same base name as video) |
-| **`.wav`** | Optional PCM audio sidecar (same base name); hidden from browser when paired with video |
-
-**Chunked episodes:** `show_part001.m1v`, `show_part002.m1v`, … — only `part001` appears in the list; the player chains parts automatically.
-
-**No sidecar audio:** Entries show **`~`** after `[V]` in the browser; video still plays (silent).
-
-### Music
+### Video
 
 | Extension | Notes |
 |-----------|--------|
-| **`.mp3`**, **`.mp2`** | Decoded with minimp3 |
-| **`.wav`** | PCM playback (also listed as `[W]` when not an FMV sidecar) |
+| **`.h264`** | From V2 converter (recommended) |
+| **`.m1v`** | MPEG-1 (older tools / `video2n64.py`) |
+| **`.mp4`** | **Label only** if `same_name.h264` or `same_name.m1v` exists |
+| **`.wav` / `.wav64`** | Audio sidecar (same base name; hidden in browser) |
 
-**Not supported on-console:** `.m4a`, `.aac` — transcode on PC first.
+**`~` after [V]** = video has no audio sidecar (plays silent).
 
-**ID3:** Title, artist, album, duration (when present); embedded **cover art** (APIC); lyrics from **USLT** (unsynced) or **SYLT** (synced).
+**Long videos:** split into parts on PC (`name_part001.h264`, `name_part002.h264`, …). The menu shows only part 1 and plays the chain automatically.
 
-**Optional folder wallpaper** (visualizer mode 7): place beside the track:
+### Music
 
-- `mp3_bg.jpg`, `mp3_bg.png`, `mp3_bg.gif`, etc. (see `sd_mp3_player.c`)
+`.mp3`, `.mp2`, `.wav` — ID3 tags, cover art, lyrics (USLT/SYLT), 8 visualizer modes.
 
 ### Images
 
-`.jpg`, `.jpeg`, `.png`, `.bmp`, `.gif`, `.tga`, `.psd`, `.hdr`, `.pic`, `.ppm`, `.pgm`, `.pnm`
-
-**GIF:** Animated when the decoded size fits internal limits; otherwise a static decode may be used.
+`.jpg`, `.png`, `.gif`, `.bmp`, `.tga`, and more — slideshow in the folder; small GIFs animate.
 
 ---
 
-## Build the ROM
+## How it works on the N64
+
+```mermaid
+flowchart TD
+    Boot[N64 + flash cart] --> ROM[Media player ROM]
+    ROM --> SD[Reads sd:/ on SD card]
+    SD --> Menu[ED64 MEDIA menu]
+    Menu -->|video| FMV[H.264 or MPEG-1 + WAV sidecar]
+    Menu -->|music| MP3[MP3 / WAV player]
+    Menu -->|image| Pic[Image viewer]
+    FMV --> Menu
+    MP3 --> Menu
+    Pic --> Menu
+```
+
+- **libdragon** handles the SD filesystem, 320×240 display, audio mixer, and FMV decode.  
+- **minimp3** plays MP3/MPEG audio.  
+- **stb + gifdec** decode stills and GIFs.  
+- Media stays on the **SD card**; the ROM is only the player (~512 KB) plus small menu graphics in `rom:/`.
+
+**Optional autoplay:** create `sd:/ED64P/VIDEO.CFG` or `sd:/ED64/VIDEO.CFG` with one line:
+
+```text
+video=sd:/path/to/clip.h264
+```
+
+The ROM plays it once, then deletes the config.
+
+---
+
+## Features
+
+### File browser
+
+- Browse all folders on `sd:/`
+- Tags: **[V]** video · **[M]** MP3 · **[W]** WAV · **[I]** image
+- N64-style header bar, framed list, gold/muted UI
+- **C-Up** → 4-page control guide in-ROM
+
+### Video playback
+
+- H.264 and MPEG-1 elementary streams
+- PCM `.wav` or VADPCM `.wav64` sidecar audio with sync
+- Pause, seek ±10 s, mute, multi-part episodes
+- MP4 “catalog” filenames when elementary file exists
+
+### Music playback
+
+- MP3/MP2/WAV, ID3 metadata, album art, synced/unsynced lyrics
+- Progress bar, pause, seek ±5 s, 8 visualizer modes
+- Optional folder wallpaper: `mp3_bg.jpg` next to the track
+
+### Image viewer
+
+- Centered scaling, folder slideshow, animated GIFs when size allows
+
+---
+
+## Build the ROM from source (developers)
+
+Requires **libdragon preview** (FMV is not on stable trunk). See [Installing libdragon](https://github.com/DragonMinded/libdragon/wiki/Installing-libdragon).
 
 ```bash
 . ./env.sh
 make -f Makefile.ed64combo ed64media.z64
 ```
 
-Output: **`MediaPlayer64.z64`** in the repository root (512 KiB typical).
+Output: **`ed64media.z64`** (same player as the release ROM; you may rename it when copying to SD).
 
-Other targets in this repo (not the unified menu):
+Other builds in this repo:
 
 | Command | Output | Purpose |
 |---------|--------|---------|
-| `make` | `n64video.z64` | Single bundled demo clip in ROM |
+| `make` | `n64video.z64` | Demo with one clip baked into ROM |
 | `make sdvideo` | `sdvideo.z64` | SD video-only browser |
 | `make sdmp3` | `sdmp3.z64` | SD music + images only |
 
 ---
 
-## Features (complete list)
+## Older conversion tools (optional)
 
-### File browser (unified menu)
+This repo also includes **MPEG-1** pipelines if you prefer `.m1v` + `.wav64`:
 
-- Navigate **`sd:/`** and subfolders (directories sorted first, then by name)
-- **7-line** scrolling list with **L / R / Z** page jumps
-- **Type tags:** `[V]` video, `[M]` MP3/MPEG audio, `[W]` WAV music, `[I]` image
-- **`~`** on `[V]` when no `.wav64` / `.wav` sidecar exists
-- **N64-style header** strip (`rom:/ui/MenuHeader.sprite`)
-- **Layered UI** (backdrop bands, framed list panel, gold/muted text styles)
-- **4-page control guide** in-ROM (**C-Up** to open; **B** or **C-Up** to close; **L / R / Z** to change page)
-- **RAM size** shown on standalone `sdvideo` menu (not on combo title line)
-- **Mirza-style icons** in `sdvideo` list (folder / play / mute); combo menu uses compact `>` selection
+| Tool | Use |
+|------|-----|
+| [`scripts/video2n64.py`](scripts/video2n64.py) | CLI: `.m1v` + `.wav64`, chunking, ROM packing |
+| [`scripts/video2n64_gui.py`](scripts/video2n64_gui.py) | GUI for the same |
+| [`scripts/encode_video.sh`](scripts/encode_video.sh) | Simple ffmpeg → `filesystem/movie.m1v` |
+| [`scripts/mp4_demux_for_n64.sh`](scripts/mp4_demux_for_n64.sh) | Demux MP4 → `.h264` + `.wav` |
+| [`scripts/sd_music_from_aac_m4a.sh`](scripts/sd_music_from_aac_m4a.sh) | AAC/M4A → MP3 for SD |
 
-### Video playback (FMV)
-
-- **MPEG-1** and **H.264** elementary decode
-- **`.wav64`** (VADPCM) or **`.wav`** (PCM) sidecar audio with A/V sync
-- **Pause / resume** (**A**) with **wav64 resync** after unpause
-- **Stop** (**B**) returns to browser
-- **Seek ±10 seconds** (D-pad Left/Right); **hold** to repeat seek
-- **Mute** (**Z**) — mixer volume only; decode continues so sync is kept
-- **On-screen icon bar** when paused (prev / play-pause / next / stop / mute)
-- **Multi-part** auto-advance for `_partNNN` / `-partNNN` naming
-- **MP4 catalog** resolution to `.h264` or `.m1v`
-- **Expansion Pak–aware** frame skipping when using `.wav64` on 4 MiB systems
-- **One-shot `VIDEO.CFG`** autoboot and optional Altra64 / engine handoff (`ALTRA64_INTEGRATION.md`)
-- **CRT margin** option in FMV parameters
-
-### Music playback
-
-- **MP3 / MP2** decode (minimp3)
-- **PCM WAV** decode with correct sample-rate mixer setup
-- **ID3v2** metadata: title, artist, album, track length estimate
-- **Embedded album art** display
-- **Lyrics panel:** unsynced (USLT) or time-synced (SYLT)
-- **Progress bar** and elapsed / total time
-- **Pause** (**A** / **Start**)
-- **Seek ±5 seconds** (**L** / **R**) when duration is known
-- **8 visualizer / background modes** (**C-Up** / **C-Down** cycle, **C-Left** reset):
-  - Default spectrum-style bars
-  - Color-shifted bars
-  - Dual-row color bars
-  - Psychedelic tile background
-  - Alternating panel colors
-  - Particle-style boxes
-  - (Modes use tick-based animation tied to playback time)
-  - **Folder wallpaper** mode (`mp3_bg.*` in same directory as track)
-- **End-of-track** detection and return to menu
-
-### Image viewer
-
-- Decode and **center** image in 320×240 viewport
-- **GIF animation** when within size limits (gifdec)
-- **Previous / next** image in same folder (**L** / **R** or D-pad Left/Right)
-- **Back** (**B** or **Start**)
-- **Hold B ~0.5 s** force-exit failsafe
-- Safe **display handoff** back to rdpq menu (buffer drain for flash carts)
-
-### ROM assets (`rom:/`)
-
-- UI sprites: Play, Pause, Stop, next, previous, Folder, Mute, MenuHeader
-- `ed64_media_help.txt` (short pointer; full help is on-screen)
-
-### Integration / ecosystem
-
-- **`sd_fmv_container.c`** — shared rules for MP4 catalog, elementary hiding, path resolution
-- **Altra64** can launch `SDVIDEO.Z64` with `VIDEO.CFG` (see `ALTRA64_INTEGRATION.md`)
-- **PC tools:** `video2n64.py` GUI/CLI, Windows `.exe` packaging (`PACKAGING.md`)
-- Optional **SM64 painting bridge** (separate ROM / config — not part of `ed64media` binary)
+Windows standalone GUI: see **[PACKAGING.md](PACKAGING.md)**.
 
 ---
 
-## Controls
+## Project layout (code)
 
-### File browser (`ed64media.z64`)
-
-| Button | Action |
-|--------|--------|
-| **D-Up / D-Down** | Move selection |
-| **L / R / Z** | Page up/down in list |
-| **A** or **Start** | Open folder or play file |
-| **B** | Parent folder |
-| **C-Up** | Open **Control guide** (4 pages) |
-
-**In help:** **B** or **C-Up** close; **L / R / Z** change page.
-
-### FMV playback
-
-| Button | Action |
-|--------|--------|
-| **A** | Pause / resume |
-| **B** | Stop (back to menu) |
-| **D-Left / D-Right** | Seek ±10 s (hold to repeat) |
-| **Z** | Mute / unmute (when audio sidecar exists) |
-
-### Music playback
-
-| Button | Action |
-|--------|--------|
-| **B** | Stop (back to menu) |
-| **A** or **Start** | Pause / resume |
-| **L / R** | Seek ±5 s |
-| **C-Up / C-Down** | Next / previous visualizer mode |
-| **C-Left** | Reset visualizer to default |
-
-### Image viewer
-
-| Button | Action |
-|--------|--------|
-| **B** or **Start** | Back to menu |
-| **L / R** or **D-Left / D-Right** | Previous / next image |
-| **Hold B** (~½ s) | Force exit |
-
-### Bundled demo ROM (`n64video.z64`)
-
-| Button | Action |
-|--------|--------|
-| **A** or **Start** | Stop and exit |
-| **Z** | Mute / unmute (if `movie.wav64` present) |
+| File | Role |
+|------|------|
+| `sd_ed64_combo_menu.c` | Main menu, routes to players |
+| `sd_ed64_menu_ui.c` | Menu chrome + help screens |
+| `sd_player.c` | FMV playback, `VIDEO.CFG`, chunks |
+| `sd_mp3_player.c` | Music + image viewer |
+| `sd_fmv_container.c` | MP4 catalog / path rules |
+| `scripts/n64-media-split/` | **V2** `.h264` + `.wav` converter |
 
 ---
 
-## Source code map
+## Troubleshooting
 
-| File | Responsibility |
-|------|----------------|
-| `sd_ed64_combo_menu.c` | Main entry, unified browser, input routing |
-| `sd_ed64_menu_ui.c` | Menu chrome + 4-page help renderer |
-| `sd_menu_topbar.c` | Header sprite blit |
-| `sd_combo_shared.c` | Shared UI font (combo build only) |
-| `sd_player.c` | SD FMV browser (standalone), `fmv_play`, OSD, chunks, `VIDEO.CFG` |
-| `sd_mp3_player.c` | MP3/WAV player, image viewer, ID3/lyrics UI |
-| `sd_fmv_container.c` | Video catalog / MP4 / path resolution helpers |
-| `main.c` | ROM-embedded `n64video` demo |
-| `Makefile.ed64combo` | Builds `ed64media.z64` |
-
-Built with **`-DSD_ED64_COMBO_MENU`** so `sd_player.c` and `sd_mp3_player.c` export `sd_fmv_play_sequence`, `sd_mp3_play_file`, and `sd_mp3_view_image` instead of separate `main()` functions.
+| Problem | What to try |
+|---------|-------------|
+| Black screen / no files | Real N64 + FAT32 SD; not most emulators |
+| Video, no sound | Add matching `.wav` or `.wav64`; `~` means no sidecar |
+| `.mp4` won’t play by itself | Use V2 converter; keep `.mp4` only as a label beside `.h264` |
+| AAC / M4A won’t play | Convert to MP3 on PC |
+| Converter fails | Install ffmpeg; add to PATH |
+| Build fails | libdragon **preview**, run `. ./env.sh` |
 
 ---
 
-## Typical encode settings (video)
+## More documentation
 
-Libdragon targets **320×wide** MPEG-1, multiples of 32×16, ~24 fps, ~800 kbps as a starting point:
+- **[FIRMWARE_ROADMAP.md](FIRMWARE_ROADMAP.md)** — future firmware / engine plans  
+- **[ALTRA64_INTEGRATION.md](ALTRA64_INTEGRATION.md)** — EverDrive menu handoff via `VIDEO.CFG`  
+- **[PACKAGING.md](PACKAGING.md)** — Windows `.exe` for older FMV converter GUI  
+- **[docs/WSL2_LIBDRAGON_SETUP.md](docs/WSL2_LIBDRAGON_SETUP.md)** — WSL2 + libdragon for developers  
 
-```bash
-ffmpeg -i input.mp4 -vb 800K -vf 'scale=320:-16' -r 24 output.m1v
-```
+## Credits
 
-Then create matching audio:
+- [libdragon](https://github.com/DragonMinded/libdragon) (preview) — N64 SDK used by the ROM  
+- [minimp3](vendor/minimp3/) · [gifdec](vendor/gifdec/) · menu icons under `assets/mirza_icons/`  
 
-```bash
-ffmpeg -i input.mp4 -vn -acodec pcm_s16le -ar 32000 -ac 1 output.wav
-audioconv64 -o . output.wav   # → output.wav64
-```
-
-Or use `./scripts/video2n64.py` to do both steps.
-
----
-
-## License & credits
-
-- **libdragon** — [DragonMinded/libdragon](https://github.com/DragonMinded/libdragon) (preview branch for FMV)
-- **minimp3** — bundled under `vendor/minimp3/`
-- **gifdec** — bundled under `vendor/gifdec/`
-- **Menu icons** — derived from Mirza icon set (see `assets/mirza_icons/`, `Makefile.sd_ui.inc`)
-- **stb** — image decode (SpaghettiKart vendor path)
-
-This repository also contains unrelated experiments (SM64 decomp hooks, MK64 texture tools, split-screen demo, etc.); those are **not** required to use the media player ROM.
-
----
-
-## Quick troubleshooting
-
-| Problem | Check |
-|---------|--------|
-| Black screen / no SD | FAT32, cart supported by libdragon, real hardware |
-| Video plays, no sound | Add matching `.wav64` or `.wav`; `~` means no sidecar found |
-| `.mp4` won’t play alone | Demux to `.m1v` or `.h264` on PC; keep `.mp4` only as a label |
-| AAC / M4A silent fail | Transcode to MP3 or WAV on PC |
-| Build fails | libdragon **preview**, `N64_INST` set via `. ./env.sh` |
-| No `ed64media.z64` after build | Run `make -f Makefile.ed64combo ed64media.z64` and fix compile errors |
-
-For the full repo (converters, Windows GUI, roadmap): see **[README.md](README.md)** and **[FIRMWARE_ROADMAP.md](FIRMWARE_ROADMAP.md)**.
+This repository also contains separate experiments (SM64 hooks, MK64 tools, demos) that are **not** required for the media player.
