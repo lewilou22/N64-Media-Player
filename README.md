@@ -267,7 +267,7 @@ Windows standalone GUI: see **[PACKAGING.md](PACKAGING.md)**.
 ---
 
 ## More documentation
-
+Video Setup Explanation https://github.com/DragonMinded/libdragon/wiki/MPEG1-Player
 - **[FIRMWARE_ROADMAP.md](FIRMWARE_ROADMAP.md)** — future firmware / engine plans  
 - **[ALTRA64_INTEGRATION.md](ALTRA64_INTEGRATION.md)** — EverDrive menu handoff via `VIDEO.CFG`  
 - **[PACKAGING.md](PACKAGING.md)** — Windows `.exe` for older FMV converter GUI  
